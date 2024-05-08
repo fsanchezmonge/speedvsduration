@@ -1,0 +1,102 @@
+### PREAMBLE ###
+# Purpose: Analyse the difference in speed on runs shorter than 90min vs longer than 90min
+# Author: Fernando Sanchez-Monge Perez
+# Email: fernandosanchezmp@gmail.com
+# Date: 5 May 2024
+# Prerequisites: Being able to access Strava API and get all activities information and having the used libraries installed
+
+import pandas as pd
+import numpy as np
+import requests
+import matplotlib.pyplot as plt
+
+# SIMULACIO DE DADES SINTÈTIQUES
+# Generate random speed and duration values
+speed = np.random.uniform(6.0, 16.0, size=200)
+duration = np.random.uniform(30, 480, size=200)
+
+# Create a DataFrame with Speed and Duration columns
+data = {
+    "Speed": speed,
+    "Duration": duration
+}
+
+df = pd.DataFrame(data)
+print(df)
+
+# DEFINICIO DE FUNCIONS PER ACCEDIR A STRAVA
+def get_values_from_api(header):
+    url = "https://www.strava.com/api/v3/athlete/activities"
+    page = 1
+    per_page = 200
+    all_activities = None
+    while True:
+        params = {'page': page, 'per_page': per_page}
+        response = requests.get(url, headers=header, params=params).json()
+
+        if len(response) == 0:
+            break
+
+        # if the all_activities list is already populated, that means we want to add additional data to it via extend.
+        if all_activities is not None:
+            all_activities.extend(response)
+
+        # if the all_activities is empty, this is the first time adding data so we just set it equal to my_dataset
+        else:
+            if isinstance(response, list):
+                all_activities = response
+            else:
+                all_activities = [response]
+
+        page += 1
+
+    return all_activities #activity_data
+
+def get_access_token():
+    auth_url = "https://www.strava.com/oauth/token"
+    payload = {
+    'client_id': 'xxxxx', 
+    'client_secret': 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    'refresh_token': 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    'grant_type': "refresh_token",
+    'f': 'json'
+    }  
+    res = requests.post(auth_url, data=payload, verify=False)
+    try:
+        access_token = res.json()['access_token']
+        header = {'Authorization': 'Bearer ' + access_token}
+
+    except KeyError:
+        st.warning("An error occured while getting the data from Strava.")
+
+    return header
+
+def clean_strava_data(all_activities):
+    activity_data = []
+    for activity in all_activities:
+        activity_data.append({
+            "activity_id": activity["id"],
+            "type": activity["sport_type"],
+            "moving_time": activity["moving_time"]/60,
+            "average_speed": activity["average_speed"] * 3.6
+        })
+    df = pd.DataFrame(activity_data)
+    return df
+
+# PROPGRAMA PRINCIPAL
+credentials = get_access_token()
+acts = get_values_from_api(credentials)
+df_activities = clean_strava_data(acts)
+
+print(df_activities.head(10))
+
+df_runs = df_activities[df_activities['type'] == 'TrailRun']
+
+plt.scatter(df_runs['moving_time'], df_runs['average_speed'])
+
+plt.xlabel('Moving Time')
+plt.ylabel('Average Speed')
+plt.title('Velocitat mitjana (km/h) vs Durada (minuts)')
+
+plt.show()
+plt.savefig('speed_vs_duration.png')
